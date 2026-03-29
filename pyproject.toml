@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lazypdf"
+version = "0.1.0"
+description = "A pandas-like wrapper for PDF operations. Read, transform, export."
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.10"
+authors = [
+    { name = "Joao Manoel Feck", email = "jmfeck@gmail.com" },
+]
+keywords = ["pdf", "merge", "split", "compress", "watermark", "ocr", "convert"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pymupdf>=1.24.0,<2.0",
+]
+
+[project.optional-dependencies]
+ocr = ["pytesseract>=0.3.10", "Pillow>=10.0.0"]
+office = ["python-docx>=1.1.0", "python-pptx>=0.6.23", "openpyxl>=3.1.0"]
+tables = ["pdfplumber>=0.11.0"]
+html = ["weasyprint>=60.0"]
+msoffice = ["pywin32>=306; sys_platform == 'win32'"]
+all = ["lazypdf[ocr,office,tables,html,msoffice]"]
+dev = [
+    "lazypdf[all]",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/jmfeck/lazypdf"
+Repository = "https://github.com/jmfeck/lazypdf"
+Issues = "https://github.com/jmfeck/lazypdf/issues"
+
+[tool.setuptools.packages.find]
+include = ["lazypdf*"]
+
+[tool.setuptools.package-data]
+lazypdf = ["py.typed"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["lazypdf"]
+
+[tool.coverage.report]
+show_missing = true
