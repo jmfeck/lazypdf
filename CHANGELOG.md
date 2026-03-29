@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2024-11-04
+## [0.1.1] - 2026-03-29
 
 ### Added
 
-- Core `PDFFile` class with pandas-like read/chain/export API
+- Core `PDFFile` class with fluent read/chain/export API
 - Entry points: `read`, `read_pdf`, `read_images`, `read_jpg`, `read_png`, `read_html`, `read_docx`, `read_xlsx`, `read_pptx`, `read_csv`, `merge`, `from_bytes`
 - Page operations: `extract_pages`, `remove_pages`, `reorder`, `reverse`, `split`, `split_at`
 - Transformations: `rotate`, `crop`, `compress`, `resize`, `flatten`, `repair`
@@ -23,4 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Office document conversion via MS Office COM (Windows) or LibreOffice (any OS)
 - Context manager and `__del__` for automatic resource cleanup
 - Comprehensive input validation with clear error messages
-- 94 tests covering core operations, validations, and edge cases
+- 114 tests covering core operations, Office conversion, validations, and edge cases
+
+## [0.1.0] - 2024-11-04
+
+### Added
+
+- Initial commit with LICENSE and README

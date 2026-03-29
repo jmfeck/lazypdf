@@ -4,7 +4,9 @@
 [![Python](https://img.shields.io/pypi/pyversions/lazypdf)](https://pypi.org/project/lazypdf/)
 [![License](https://img.shields.io/github/license/jmfeck/lazypdf)](LICENSE)
 
-A pandas-like Python wrapper for PDF operations. Read, transform, export.
+Simple PDF manipulation and conversion for Python. Read a PDF, transform it, export to another format. That's it.
+
+No complex pipelines, no bloated abstractions — just a clean, fluent API to merge, split, compress, watermark, convert, and more.
 
 ## Install
 
