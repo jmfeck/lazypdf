@@ -20,7 +20,9 @@ Optional extras:
 pip install lazypdf[ocr]       # OCR support (pytesseract + Pillow)
 pip install lazypdf[office]    # DOCX/XLSX/PPTX export (python-docx, openpyxl, python-pptx)
 pip install lazypdf[tables]    # Table extraction (pdfplumber)
-pip install lazypdf[html]      # HTML to PDF (WeasyPrint)
+pip install lazypdf[html]      # HTML to PDF via WeasyPrint engine
+pip install lazypdf[browser]   # HTML to PDF via Playwright engine (Chromium)
+pip install lazypdf[repair]    # PDF repair via pikepdf engine
 pip install lazypdf[msoffice]  # MS Office COM automation on Windows (pywin32)
 pip install lazypdf[all]       # Everything
 ```
@@ -93,10 +95,10 @@ lz.read("doc.pdf").split("output_dir/", every=1)
 | `lz.read(path)` | Read a PDF file | pymupdf |
 | `lz.read_pdf(path)` | Alias for `read()` | pymupdf |
 | `lz.merge(*paths)` | Merge multiple PDFs | pymupdf |
-| `lz.read_images(*paths)` | Create PDF from images | pymupdf |
-| `lz.read_jpg(*paths)` | Create PDF from JPEGs | pymupdf |
-| `lz.read_png(*paths)` | Create PDF from PNGs | pymupdf |
-| `lz.read_html(path_or_url)` | Create PDF from HTML | weasyprint |
+| `lz.read_images(*paths, page_size=)` | Create PDF from images (default: `"fit"`) | pymupdf |
+| `lz.read_jpg(*paths, page_size=)` | Create PDF from JPEGs | pymupdf |
+| `lz.read_png(*paths, page_size=)` | Create PDF from PNGs | pymupdf |
+| `lz.read_html(path_or_url, engine=)` | Create PDF from HTML (default: `"pymupdf"`) | pymupdf |
 | `lz.read_docx(path)` | Read Word document | MS Office / LibreOffice |
 | `lz.read_xlsx(path)` | Read Excel spreadsheet | MS Office / LibreOffice |
 | `lz.read_pptx(path)` | Read PowerPoint presentation | MS Office / LibreOffice |
@@ -110,7 +112,7 @@ lz.read("doc.pdf").split("output_dir/", every=1)
 | `.merge(*others)` | Append more PDFs (paths, objects, or lists) |
 | `.rotate(degrees, pages=)` | Rotate pages (multiple of 90) |
 | `.crop(left=, top=, right=, bottom=, pages=)` | Crop page margins (in points) |
-| `.compress()` | Reduce file size (deflate compression, dedup objects) |
+| `.compress(img_quality=, compression_level=)` | Reduce file size (deflate compression, dedup objects) |
 | `.add_watermark(text, ...)` | Add text watermark |
 | `.add_image_watermark(path, ...)` | Add image watermark (with opacity) |
 | `.add_page_numbers(...)` | Insert page numbers |
@@ -120,10 +122,10 @@ lz.read("doc.pdf").split("output_dir/", every=1)
 | `.remove_pages(pages)` | Remove specified pages |
 | `.reorder(order)` | Reorder/duplicate pages |
 | `.reverse()` | Reverse page order |
-| `.encrypt(password)` | Add password protection (AES-256) |
+| `.encrypt(password, algorithm=)` | Add password protection (default: AES-256-R5) |
 | `.decrypt(password)` | Remove password protection |
 | `.redact(text)` | Black out text permanently |
-| `.repair()` | Fix corrupted PDFs |
+| `.repair(engine=)` | Fix corrupted PDFs (default: `"auto"`) |
 | `.ocr(language=)` | Make scanned pages searchable |
 | `.copy()` | Create independent copy |
 
@@ -139,7 +141,7 @@ All page parameters are **1-indexed** (first page = 1).
 | `.to_images(output_dir, fmt=)` | `list[str]` (image paths) |
 | `.to_docx(path)` | `str` (output path) |
 | `.to_xlsx(path)` | `str` (output path) |
-| `.to_pdfa(path, level=)` | `str` (output path, requires Ghostscript) |
+| `.to_pdfa(path, level=, engine=)` | `str` (output path, default: `"pymupdf"`) |
 | `.to_bytes()` | `bytes` |
 | `.split(output_dir, every=)` | `list[str]` (PDF paths) |
 | `.split_at(output_dir, at=)` | `list[str]` (PDF paths) |
@@ -148,8 +150,8 @@ All page parameters are **1-indexed** (first page = 1).
 
 | Method / Property | Returns |
 |----------|---------|
-| `.extract_text(pages=)` | `str` |
-| `.extract_tables(pages=)` | `list[list[list[str]]]` |
+| `.extract_text(pages=, engine=, page_separator=)` | `str` |
+| `.extract_tables(pages=, flavor=)` | `list[list[list[str]]]` |
 | `.extract_images(output_dir, pages=)` | `list[str]` (image paths) |
 | `.metadata` | `dict` |
 | `.page_count` | `int` |
@@ -161,10 +163,10 @@ All page parameters are **1-indexed** (first page = 1).
 - **`to_docx()`** extracts text only. Images, tables, and complex formatting are not preserved.
 - **`to_xlsx()`** only exports tables found in the PDF. Requires `[tables]` and `[office]` extras.
 - **OCR** (`ocr()`) requires Tesseract to be installed on the system in addition to the `[ocr]` pip extra.
-- **`read_html()`** requires WeasyPrint which has system-level dependencies (Pango, Cairo). See [WeasyPrint docs](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html).
+- **`read_html()`** defaults to PyMuPDF Story engine (basic CSS). For better rendering, use `engine="weasyprint"` (requires GTK) or `engine="playwright"` (requires Chromium).
 - **Redaction** (`redact()`) is case-sensitive exact text match. Save the result with `to_pdf()` to persist.
-- **PDF/A** (`to_pdfa()`) requires Ghostscript installed on the system (`gs` on Linux/Mac, `gswin64c` on Windows).
-- **Flatten** (`flatten()`) rasterizes pages to images — text becomes non-searchable. Use higher DPI for better quality.
+- **PDF/A** (`to_pdfa()`) defaults to PyMuPDF engine which may not pass strict validators. Use `engine="ghostscript"` for full compliance (requires Ghostscript binary).
+- **Flatten** (`flatten()`) rasterizes pages to images — text becomes non-searchable. Default DPI is 72; use higher values for better quality.
 - **Image watermark** (`add_image_watermark()`) requires Pillow (included in `[ocr]` extra).
 
 ## License
