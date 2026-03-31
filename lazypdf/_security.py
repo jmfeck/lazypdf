@@ -17,6 +17,7 @@ class SecurityMixin:
         *,
         owner_password: str | None = None,
         permissions: int = 4095,
+        algorithm: str = "AES-256-R5",
     ) -> PDFFile:
         """Add password protection to the PDF.
 
@@ -24,8 +25,21 @@ class SecurityMixin:
             user_password: Password required to open the PDF.
             owner_password: Password for full access. Defaults to user_password.
             permissions: Permission flags bitmask. Default allows all except printing/copying restrictions.
+            algorithm: Encryption algorithm. Options: ``"AES-256-R5"``, ``"AES-256"``,
+                ``"AES-128"``, ``"RC4-128"``, ``"RC4-40"``.
         """
         import pymupdf
+
+        algo_map = {
+            "AES-256-R5": pymupdf.PDF_ENCRYPT_AES_256,
+            "AES-256": pymupdf.PDF_ENCRYPT_AES_256,
+            "AES-128": pymupdf.PDF_ENCRYPT_AES_128,
+            "RC4-128": pymupdf.PDF_ENCRYPT_RC4_128,
+            "RC4-40": pymupdf.PDF_ENCRYPT_RC4_40,
+        }
+        encrypt_val = algo_map.get(algorithm.upper())
+        if encrypt_val is None:
+            raise ValueError(f"Unknown algorithm '{algorithm}'. Options: {sorted(algo_map.keys())}")
 
         if owner_password is None:
             owner_password = user_password
@@ -33,7 +47,7 @@ class SecurityMixin:
             "user_pw": user_password,
             "owner_pw": owner_password,
             "perm": permissions,
-            "encrypt": pymupdf.PDF_ENCRYPT_AES_256,
+            "encrypt": encrypt_val,
         }
         return self
 

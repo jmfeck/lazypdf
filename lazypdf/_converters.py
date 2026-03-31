@@ -148,25 +148,73 @@ class ConvertersMixin:
         wb.save(output_path)
         return output_path
 
-    def to_pdfa(self: PDFFile, output_path: str, *, level: int = 2) -> str:
+    def to_pdfa(self: PDFFile, output_path: str, *, level: int = 2, engine: str = "pymupdf") -> str:
         """Convert the PDF to PDF/A format for archival.
-
-        Requires Ghostscript installed on the system ('gs' on Linux/Mac, 'gswin64c' on Windows).
 
         Args:
             output_path: Destination file path.
             level: PDF/A conformance level (1, 2, or 3). Default is 2.
+            engine: Conversion engine. ``"pymupdf"`` (default, zero deps) or
+                ``"ghostscript"`` (most compliant, requires Ghostscript binary).
 
         Returns:
             The output file path.
         """
+        valid_engines = {"pymupdf", "ghostscript"}
+        if engine not in valid_engines:
+            raise ValueError(f"Unknown engine '{engine}'. Options: {sorted(valid_engines)}")
+
+        if level not in (1, 2, 3):
+            raise ValueError(f"PDF/A level must be 1, 2, or 3, got {level}.")
+
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+        if engine == "pymupdf":
+            return self._to_pdfa_pymupdf(output_path, level)
+        else:
+            return self._to_pdfa_ghostscript(output_path, level)
+
+    def _to_pdfa_pymupdf(self: PDFFile, output_path: str, level: int) -> str:
+        """Convert to PDF/A using PyMuPDF metadata + font embedding."""
+        import pymupdf
+        from datetime import datetime, timezone
+
+        data = self._doc.tobytes(garbage=4, deflate=True, clean=True)
+        doc = pymupdf.open("pdf", data)
+
+        now = datetime.now(timezone.utc).strftime("D:%Y%m%d%H%M%S+00'00'")
+        doc.set_metadata({
+            "producer": "lazypdf (PyMuPDF)",
+            "creator": "lazypdf",
+            "creationDate": now,
+            "modDate": now,
+        })
+
+        pdfaid_part = str(level)
+        xmp = (
+            '<?xpacket begin="\xef\xbb\xbf" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+            '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+            '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            '<rdf:Description rdf:about=""'
+            ' xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">'
+            f"<pdfaid:part>{pdfaid_part}</pdfaid:part>"
+            "<pdfaid:conformance>B</pdfaid:conformance>"
+            "</rdf:Description>"
+            "</rdf:RDF>"
+            "</x:xmpmeta>"
+            '<?xpacket end="w"?>'
+        )
+        doc.set_xml_metadata(xmp)
+        doc.save(output_path, garbage=4, deflate=True, clean=True)
+        doc.close()
+        return output_path
+
+    def _to_pdfa_ghostscript(self: PDFFile, output_path: str, level: int) -> str:
+        """Convert to PDF/A using Ghostscript."""
         import shutil
         import subprocess
         import sys
         import tempfile
-
-        if level not in (1, 2, 3):
-            raise ValueError(f"PDF/A level must be 1, 2, or 3, got {level}.")
 
         if sys.platform == "win32":
             gs = shutil.which("gswin64c") or shutil.which("gswin32c") or shutil.which("gs")
@@ -179,13 +227,12 @@ class ConvertersMixin:
                 "and make sure 'gs' (or 'gswin64c' on Windows) is on your PATH."
             )
 
-        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp_path = tmp.name
-            self._doc.save(tmp_path)
-
+        tmp_path = None
         try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, delete_on_close=False) as tmp:
+                tmp_path = tmp.name
+                self._doc.save(tmp_path)
+
             subprocess.run(
                 [
                     gs,
@@ -203,7 +250,11 @@ class ConvertersMixin:
                 capture_output=True,
             )
         finally:
-            os.unlink(tmp_path)
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
         return output_path
 

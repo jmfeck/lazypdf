@@ -118,7 +118,6 @@ has_ghostscript = (
 )
 
 
-@pytest.mark.skipif(not has_ghostscript, reason="Ghostscript not installed")
 class TestToPdfa:
     def test_to_pdfa(self, sample_pdf, output_dir):
         out = lz.read(sample_pdf).to_pdfa(f"{output_dir}/archive.pdf")
@@ -131,3 +130,8 @@ class TestToPdfa:
     def test_to_pdfa_invalid_level(self, sample_pdf, output_dir):
         with pytest.raises(ValueError, match="PDF/A level must be"):
             lz.read(sample_pdf).to_pdfa(f"{output_dir}/bad.pdf", level=5)
+
+    @pytest.mark.skipif(not has_ghostscript, reason="Ghostscript not installed")
+    def test_to_pdfa_ghostscript(self, sample_pdf, output_dir):
+        out = lz.read(sample_pdf).to_pdfa(f"{output_dir}/archive_gs.pdf", engine="ghostscript")
+        assert os.path.exists(out)

@@ -14,26 +14,44 @@ class PagesMixin:
     def extract_pages(self: PDFFile, pages: list[int]) -> PDFFile:
         """Keep only the specified pages (1-indexed). Returns self for chaining.
 
+        Automatically cleans up orphaned resources (fonts, images) that are no
+        longer referenced by the remaining pages.
+
         Args:
             pages: List of 1-indexed page numbers to keep.
         """
+        import pymupdf
+
         validate_pages(pages, len(self._doc))
         indices = sorted(set(p - 1 for p in pages))
         self._doc.select(indices)
+        # Re-save with garbage collection to remove orphaned resources
+        data = self._doc.tobytes(garbage=4, deflate=True, clean=True)
+        self._doc.close()
+        self._doc = pymupdf.open("pdf", data)
         return self
 
     def remove_pages(self: PDFFile, pages: list[int]) -> PDFFile:
         """Remove the specified pages (1-indexed). Returns self for chaining.
 
+        Automatically cleans up orphaned resources (fonts, images) that are no
+        longer referenced by the remaining pages.
+
         Args:
             pages: List of 1-indexed page numbers to remove.
         """
+        import pymupdf
+
         validate_pages(pages, len(self._doc))
         to_remove = set(p - 1 for p in pages)
         keep = [i for i in range(len(self._doc)) if i not in to_remove]
         if not keep:
             raise ValueError("Cannot remove all pages from a PDF.")
         self._doc.select(keep)
+        # Re-save with garbage collection to remove orphaned resources
+        data = self._doc.tobytes(garbage=4, deflate=True, clean=True)
+        self._doc.close()
+        self._doc = pymupdf.open("pdf", data)
         return self
 
     def reorder(self: PDFFile, order: list[int]) -> PDFFile:

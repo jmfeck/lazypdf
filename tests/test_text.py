@@ -109,4 +109,4 @@ class TestVersion:
     def test_version_exists(self):
         assert hasattr(lz, "__version__")
         assert isinstance(lz.__version__, str)
-        assert lz.__version__ == "0.1.1"
+        assert lz.__version__ == "0.2.0"

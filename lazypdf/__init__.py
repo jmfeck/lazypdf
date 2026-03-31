@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from lazypdf.core import PDFFile
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "read",
@@ -57,7 +57,7 @@ def read_pdf(path: str) -> PDFFile:
     return read(path)
 
 
-def read_images(*paths: str, page_size: str = "a4") -> PDFFile:
+def read_images(*paths: str, page_size: str = "fit") -> PDFFile:
     """Create a PDF from one or more image files.
 
     Args:
@@ -109,42 +109,117 @@ def read_images(*paths: str, page_size: str = "a4") -> PDFFile:
     return PDFFile(doc)
 
 
-def read_jpg(*paths: str, page_size: str = "a4") -> PDFFile:
+def read_jpg(*paths: str, page_size: str = "fit") -> PDFFile:
     """Create a PDF from JPEG images. Alias for read_images()."""
     return read_images(*paths, page_size=page_size)
 
 
-def read_png(*paths: str, page_size: str = "a4") -> PDFFile:
+def read_png(*paths: str, page_size: str = "fit") -> PDFFile:
     """Create a PDF from PNG images. Alias for read_images()."""
     return read_images(*paths, page_size=page_size)
 
 
-def read_html(path_or_url: str) -> PDFFile:
+def read_html(path_or_url: str, *, engine: str = "pymupdf") -> PDFFile:
     """Create a PDF from an HTML file or URL.
-
-    Requires WeasyPrint: pip install weasyprint
 
     Args:
         path_or_url: Path to an HTML file or a URL.
+        engine: Rendering engine. ``"pymupdf"`` (default, zero deps),
+            ``"weasyprint"`` (better CSS), ``"playwright"`` (full browser).
 
     Returns:
         A PDFFile instance.
     """
-    try:
-        from weasyprint import HTML
-    except ImportError:
-        raise ImportError("HTML to PDF requires WeasyPrint. Install with: pip install weasyprint") from None
+    valid_engines = {"pymupdf", "weasyprint", "playwright"}
+    if engine not in valid_engines:
+        raise ValueError(f"Unknown engine '{engine}'. Options: {sorted(valid_engines)}")
 
     import pymupdf
 
     from lazypdf.core import PDFFile
 
-    if path_or_url.startswith(("http://", "https://")):
-        pdf_bytes = HTML(url=path_or_url).write_pdf()
-    else:
-        pdf_bytes = HTML(filename=path_or_url).write_pdf()
-    doc = pymupdf.open("pdf", pdf_bytes)
-    return PDFFile(doc)
+    if engine == "pymupdf":
+        import os
+        import tempfile
+
+        is_url = path_or_url.startswith(("http://", "https://"))
+        if is_url:
+            import urllib.request
+
+            with urllib.request.urlopen(path_or_url) as resp:  # noqa: S310
+                html_content = resp.read().decode("utf-8")
+        else:
+            with open(path_or_url, encoding="utf-8") as f:
+                html_content = f.read()
+
+        story = pymupdf.Story(html=html_content)
+        MEDIABOX = pymupdf.paper_rect("a4")
+        WHERE = MEDIABOX + (36, 36, -36, -36)  # 0.5 inch margins
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, delete_on_close=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            writer = pymupdf.DocumentWriter(tmp_path)
+            more = True
+            while more:
+                dev = writer.begin_page(MEDIABOX)
+                more, _ = story.place(WHERE)
+                story.draw(dev)
+                writer.end_page()
+            writer.close()
+
+            doc = pymupdf.open(tmp_path)
+            # Re-load into memory so we can delete the temp file
+            data = doc.tobytes()
+            doc.close()
+            doc = pymupdf.open("pdf", data)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        return PDFFile(doc)
+
+    elif engine == "weasyprint":
+        try:
+            from weasyprint import HTML
+        except ImportError:
+            raise ImportError(
+                "engine='weasyprint' requires WeasyPrint. Install with: pip install lazypdf[html]"
+            ) from None
+
+        if path_or_url.startswith(("http://", "https://")):
+            pdf_bytes = HTML(url=path_or_url).write_pdf()
+        else:
+            pdf_bytes = HTML(filename=path_or_url).write_pdf()
+        doc = pymupdf.open("pdf", pdf_bytes)
+        return PDFFile(doc)
+
+    else:  # playwright
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            raise ImportError(
+                "engine='playwright' requires Playwright. Install with: pip install lazypdf[browser]"
+            ) from None
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            if path_or_url.startswith(("http://", "https://")):
+                page.goto(path_or_url, wait_until="networkidle")
+            else:
+                import os
+
+                file_url = "file:///" + os.path.abspath(path_or_url).replace("\\", "/")
+                page.goto(file_url, wait_until="networkidle")
+            pdf_bytes = page.pdf()
+            browser.close()
+
+        doc = pymupdf.open("pdf", pdf_bytes)
+        return PDFFile(doc)
 
 
 def _msoffice_to_pdf(path: str, app: str) -> bytes:

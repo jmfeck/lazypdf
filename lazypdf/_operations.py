@@ -83,17 +83,51 @@ class OperationsMixin:
             page.set_cropbox(new_rect)
         return self
 
-    def compress(self: PDFFile) -> PDFFile:
+    def compress(
+        self: PDFFile,
+        *,
+        img_quality: int | None = None,
+        compression_level: int = 5,
+    ) -> PDFFile:
         """Compress the PDF to reduce file size.
 
         Applies deflate compression to streams, images and fonts, and removes
         unused/duplicate objects.
+
+        Args:
+            img_quality: Quality level for image recompression (1-100).
+                ``None`` skips image recompression.
+            compression_level: Deflate compression level for content streams (1-9).
         """
+        import pymupdf
+
+        if img_quality is not None and not (1 <= img_quality <= 100):
+            raise ValueError(f"img_quality must be between 1 and 100, got {img_quality}.")
+        if not (1 <= compression_level <= 9):
+            raise ValueError(f"compression_level must be between 1 and 9, got {compression_level}.")
+
         self._save_opts["deflate"] = True
         self._save_opts["deflate_images"] = True
         self._save_opts["deflate_fonts"] = True
         self._save_opts["garbage"] = 4
         self._save_opts["clean"] = True
+
+        if img_quality is not None:
+            # Recompress images at the given quality by re-saving through pymupdf
+            for page_idx in range(len(self._doc)):
+                page = self._doc[page_idx]
+                images = page.get_images(full=True)
+                for img_info in images:
+                    xref = img_info[0]
+                    try:
+                        pix = pymupdf.Pixmap(self._doc, xref)
+                    except Exception:
+                        continue
+                    if pix.n > 4:
+                        pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+                    img_bytes = pix.tobytes("jpeg", jpg_quality=img_quality)
+                    self._doc.update_stream(xref, img_bytes)
+
         return self
 
     def add_watermark(
@@ -291,7 +325,7 @@ class OperationsMixin:
         self._doc = new_doc
         return self
 
-    def flatten(self: PDFFile, *, dpi: int = 150, pages: list[int] | None = None) -> PDFFile:
+    def flatten(self: PDFFile, *, dpi: int = 72, pages: list[int] | None = None) -> PDFFile:
         """Flatten pages by rasterizing them to images.
 
         Burns all annotations, form fields, and layers into a flat image per page.
@@ -318,13 +352,62 @@ class OperationsMixin:
         self._doc = new_doc
         return self
 
-    def repair(self: PDFFile) -> PDFFile:
-        """Attempt to repair a corrupted PDF by re-saving through PyMuPDF."""
+    def repair(self: PDFFile, *, engine: str = "auto") -> PDFFile:
+        """Attempt to repair a corrupted PDF.
+
+        Args:
+            engine: Repair engine. ``"pymupdf"`` (built-in), ``"pikepdf"``
+                (strong at object stream corruption), or ``"auto"`` (tries
+                each engine in order, returns first success).
+        """
+        valid_engines = {"pymupdf", "pikepdf", "auto"}
+        if engine not in valid_engines:
+            raise ValueError(f"Unknown engine '{engine}'. Options: {sorted(valid_engines)}")
+
+        if engine == "pymupdf":
+            return self._repair_pymupdf()
+        elif engine == "pikepdf":
+            return self._repair_pikepdf()
+        else:  # auto
+            try:
+                return self._repair_pymupdf()
+            except Exception:
+                pass
+            try:
+                return self._repair_pikepdf()
+            except ImportError:
+                raise
+            except Exception:
+                raise
+
+    def _repair_pymupdf(self: PDFFile) -> PDFFile:
+        """Repair using PyMuPDF (re-save with garbage collection)."""
         import pymupdf
 
         data = self._doc.tobytes(garbage=4, deflate=True, clean=True)
         self._doc.close()
         self._doc = pymupdf.open("pdf", data)
+        return self
+
+    def _repair_pikepdf(self: PDFFile) -> PDFFile:
+        """Repair using pikepdf."""
+        try:
+            import pikepdf
+        except ImportError:
+            raise ImportError(
+                "engine='pikepdf' requires pikepdf. Install with: pip install lazypdf[repair]"
+            ) from None
+
+        import pymupdf
+        from io import BytesIO
+
+        raw = self._doc.tobytes()
+        buf = BytesIO()
+        with pikepdf.open(BytesIO(raw)) as pdf:
+            pdf.save(buf, linearize=True)
+
+        self._doc.close()
+        self._doc = pymupdf.open("pdf", buf.getvalue())
         return self
 
     def ocr(self: PDFFile, *, language: str = "eng", pages: list[int] | None = None) -> PDFFile:
